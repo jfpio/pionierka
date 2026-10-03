@@ -4,10 +4,13 @@ export type Part = { a: Point; b: Point; radius: number };
 export type Member = Part & { kind: 'post' | 'rail'; owners: string[]; joints: number[] };
 export const defaults = { width: 75, length: 185, lower: 35, upper: 120, x: 0, z: 0, rotation: 0 };
 export const EDGE_CLEARANCE = 20;
+export const MAST_RADIUS=4;
+export const MASTS=[{x:0,z:-250,name:'tylnym'},{x:0,z:0,name:'środkowym'},{x:0,z:250,name:'przy wejściu'}];
+export function mastCollisions(b:Bed){const r=bounds(b);return MASTS.filter(m=>Math.hypot(m.x-Math.max(r.minX,Math.min(r.maxX,m.x)),m.z-Math.max(r.minZ,Math.min(r.maxZ,m.z)))<=MAST_RADIUS+1e-6);}
 export const shelfDefaults = {...defaults, width:90,length:30,lower:45,middle:90,upper:135};
-export const itemName = (b:Bed) => b.kind === 'shelf' ? `Regał — ${b.shelfCount||3} poziomy` : b.levels === 1 ? 'Prycza jednopoziomowa' : b.levels===2 ? 'Prycza dwupoziomowa' : 'Prycza trzypoziomowa';
+export const itemName = (b:Bed) => b.kind === 'shelf' ? 'Regał' : b.levels === 1 ? 'Prycza jednopoziomowa' : b.levels===2 ? 'Prycza dwupoziomowa' : 'Prycza trzypoziomowa';
 const EPS = 1e-6;
-export const heights = (b: Bed) => b.kind==='shelf' && (b.shelfCount||3)>3 ? Array.from({length:b.shelfCount!},(_,i)=>b.lower+i*(b.upper-b.lower)/(b.shelfCount!-1)) : b.levels === 3 ? [b.lower,b.middle!,b.upper] : b.levels === 2 ? [b.lower, b.upper] : [b.lower];
+export const heights = (b: Bed) => b.kind==='shelf' && b.shelfCount===1 ? [b.upper] : b.kind==='shelf' && b.shelfCount===2 ? [b.lower,b.upper] : b.kind==='shelf' && (b.shelfCount||3)>3 ? Array.from({length:b.shelfCount!},(_,i)=>b.lower+i*(b.upper-b.lower)/(b.shelfCount!-1)) : b.levels === 3 ? [b.lower,b.middle!,b.upper] : b.levels === 2 ? [b.lower, b.upper] : [b.lower];
 export const top = (b: Bed) => b.levels > 1 ? b.upper : b.lower;
 
 export function members(b: Bed): Member[] {
@@ -93,6 +96,7 @@ export function collisions(beds: Bed[]) {
     const box = bounds(b), errors: string[] = [], gap = clearance(b);
     if (Math.min(gap,250-box.maxZ) < -EPS) errors.push('Konstrukcja wychodzi poza obrys namiotu.');
     if (gap < EDGE_CLEARANCE - EPS) errors.push('Za blisko ściany bocznej lub tylnej — wymagane 20 cm.');
+    for(const mast of mastCollisions(b))errors.push('Konstrukcja koliduje z masztem '+mast.name+'.');
     if (roofCollision(b)) errors.push('Konstrukcja dotyka lub przecina dach namiotu.');
     for (const other of beds) {
       if (other.id === b.id || connected(b, other)) continue;
@@ -127,9 +131,9 @@ export function validate(b: Bed) {
   for (const k of ['width', 'length', 'lower', 'upper', 'x', 'z', 'rotation'] as const) if (typeof b[k] !== 'number' || !Number.isFinite(b[k])) throw Error('Wpisz poprawną liczbę.');
   if (b.width < 40 || b.width > 250 || b.length < 20 || b.length > 400) throw Error('Szerokość: 40–250 cm. Długość: 20–400 cm.');
   if (b.lower < 12 || b.lower > 280 || b.upper < 12 || b.upper > 280) throw Error('Wysokość posłania: 12–280 cm.');
-  if (b.levels > 1 && b.upper < b.lower + 10) throw Error('Górne posłanie musi być co najmniej 10 cm nad dolnym.');
+  if (b.levels > 1 && !(b.kind==='shelf'&&b.shelfCount===1) && b.upper < b.lower + 10) throw Error('Górne posłanie musi być co najmniej 10 cm nad dolnym.');
   if(b.levels===3&&(b.kind!=='shelf'||(b.shelfCount||3)===3)&&(!Number.isFinite(b.middle)||b.middle!<b.lower+10||b.middle!>b.upper-10))throw Error('Środkowa półka musi być co najmniej 10 cm od sąsiednich poziomów.');
-  if(b.shelfCount!==undefined&&(!Number.isInteger(b.shelfCount)||b.shelfCount<3||b.shelfCount>10||b.kind!=='shelf'||(b.upper-b.lower)/(b.shelfCount-1)<10))throw Error('Regał: 3–10 poziomów, odstęp minimum 10 cm.');
+  if(b.shelfCount!==undefined&&(!Number.isInteger(b.shelfCount)||b.shelfCount<1||b.shelfCount>10||b.kind!=='shelf'||(b.shelfCount>1&&(b.upper-b.lower)/(b.shelfCount-1)<10)))throw Error('Regał: 1–10 poziomów, odstęp minimum 10 cm.');
   if (Math.abs(b.x) > 1000 || Math.abs(b.z) > 1000) throw Error('Pozycja musi mieścić się w zakresie −1000–1000 cm.');
   if (![0, 90, 180, 270].includes(b.rotation)) throw Error('Obrót musi wynosić 0°, 90°, 180° lub 270°.');
   return b;
@@ -151,6 +155,7 @@ export function snapBed(beds: Bed[], id: string, targetId?: string, side?:JoinSi
   return options[0] || b;
 }
 export type Layout = { beds: Bed[]; selected: string | null };
+export function dropPreview(beds:Bed[],id:string){if(!beds.some(b=>b.id===id))return null;const candidate=snapBed(beds,id);const partners=beds.filter(b=>connected(candidate,b));if(!partners.length)return null;const projected=beds.map(b=>b.id===id?candidate:b),issues=collisions(projected);if(issues[id].length||partners.some(b=>issues[b.id].length))return null;return {candidate,ids:[id,...partners.map(b=>b.id)],issues};}
 export function joinStatus(beds:Bed[],id:string,targetId:string,side:JoinSide){const candidate=snapBed(beds,id,targetId,side);const errors=collisions(beds.map(b=>b.id===id?candidate:b))[id];return {candidate,errors,valid:errors.length===0};}
 export type Action = {type:'load';layout:Layout} | {type:'bed-level';id:string;delta:1|-1} | {type:'clear'} | {type:'restore';layout:Layout} | {type:'shelf-level';id:string;delta:1|-1} | { type: 'add'; levels: 1 | 2 | 3; kind?:'bed'|'shelf' } | { type: 'update'; id: string; patch: Partial<Bed> } | { type: 'remove'; id: string } | { type: 'select'; id: string | null } | { type: 'join'; id: string; targetId: string; side?:JoinSide } | { type: 'snap'; id: string };
 export function nextLayout(state: Layout, action: Action): Layout {
