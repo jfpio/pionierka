@@ -1,13 +1,13 @@
-export type Bed = { id: string; kind?: 'bed' | 'shelf'; levels: 1 | 2 | 3; middle?: number; width: number; length: number; lower: number; upper: number; x: number; z: number; rotation: number };
+export type Bed = { id: string; kind?: 'bed' | 'shelf'; levels: 1 | 2 | 3; middle?: number; shelfCount?: number; width: number; length: number; lower: number; upper: number; x: number; z: number; rotation: number };
 export type Point = [number, number, number];
 export type Part = { a: Point; b: Point; radius: number };
 export type Member = Part & { kind: 'post' | 'rail'; owners: string[]; joints: number[] };
 export const defaults = { width: 75, length: 185, lower: 35, upper: 120, x: 0, z: 0, rotation: 0 };
 export const EDGE_CLEARANCE = 20;
 export const shelfDefaults = {...defaults, width:90,length:30,lower:45,middle:90,upper:135};
-export const itemName = (b:Bed) => b.kind === 'shelf' ? 'Regał trzypoziomowy' : b.levels === 1 ? 'Prycza jednopoziomowa' : 'Prycza dwupoziomowa';
+export const itemName = (b:Bed) => b.kind === 'shelf' ? `Regał — ${b.shelfCount||3} poziomy` : b.levels === 1 ? 'Prycza jednopoziomowa' : b.levels===2 ? 'Prycza dwupoziomowa' : 'Prycza trzypoziomowa';
 const EPS = 1e-6;
-export const heights = (b: Bed) => b.levels === 3 ? [b.lower,b.middle!,b.upper] : b.levels === 2 ? [b.lower, b.upper] : [b.lower];
+export const heights = (b: Bed) => b.kind==='shelf' && (b.shelfCount||3)>3 ? Array.from({length:b.shelfCount!},(_,i)=>b.lower+i*(b.upper-b.lower)/(b.shelfCount!-1)) : b.levels === 3 ? [b.lower,b.middle!,b.upper] : b.levels === 2 ? [b.lower, b.upper] : [b.lower];
 export const top = (b: Bed) => b.levels > 1 ? b.upper : b.lower;
 
 export function members(b: Bed): Member[] {
@@ -123,12 +123,13 @@ export function materialList(beds: Bed[]) {
   };
 }
 export function validate(b: Bed) {
-  if (b.kind==='shelf' ? b.levels!==3 : b.levels!==1&&b.levels!==2) throw Error('Wybierz 1 lub 2 poziomy.');
+  if (b.kind==='shelf' ? b.levels!==3 : ![1,2,3].includes(b.levels)) throw Error('Wybierz 1 lub 2 poziomy.');
   for (const k of ['width', 'length', 'lower', 'upper', 'x', 'z', 'rotation'] as const) if (typeof b[k] !== 'number' || !Number.isFinite(b[k])) throw Error('Wpisz poprawną liczbę.');
   if (b.width < 40 || b.width > 250 || b.length < 20 || b.length > 400) throw Error('Szerokość: 40–250 cm. Długość: 20–400 cm.');
   if (b.lower < 12 || b.lower > 280 || b.upper < 12 || b.upper > 280) throw Error('Wysokość posłania: 12–280 cm.');
   if (b.levels > 1 && b.upper < b.lower + 10) throw Error('Górne posłanie musi być co najmniej 10 cm nad dolnym.');
-  if(b.levels===3&&(!Number.isFinite(b.middle)||b.middle!<b.lower+10||b.middle!>b.upper-10))throw Error('Środkowa półka musi być co najmniej 10 cm od sąsiednich poziomów.');
+  if(b.levels===3&&(b.kind!=='shelf'||(b.shelfCount||3)===3)&&(!Number.isFinite(b.middle)||b.middle!<b.lower+10||b.middle!>b.upper-10))throw Error('Środkowa półka musi być co najmniej 10 cm od sąsiednich poziomów.');
+  if(b.shelfCount!==undefined&&(!Number.isInteger(b.shelfCount)||b.shelfCount<3||b.shelfCount>10||b.kind!=='shelf'||(b.upper-b.lower)/(b.shelfCount-1)<10))throw Error('Regał: 3–10 poziomów, odstęp minimum 10 cm.');
   if (Math.abs(b.x) > 1000 || Math.abs(b.z) > 1000) throw Error('Pozycja musi mieścić się w zakresie −1000–1000 cm.');
   if (![0, 90, 180, 270].includes(b.rotation)) throw Error('Obrót musi wynosić 0°, 90°, 180° lub 270°.');
   return b;
@@ -150,8 +151,14 @@ export function snapBed(beds: Bed[], id: string, targetId?: string, side?:JoinSi
   return options[0] || b;
 }
 export type Layout = { beds: Bed[]; selected: string | null };
-export type Action = { type: 'add'; levels: 1 | 2 | 3; kind?:'bed'|'shelf' } | { type: 'update'; id: string; patch: Partial<Bed> } | { type: 'remove'; id: string } | { type: 'select'; id: string | null } | { type: 'join'; id: string; targetId: string; side?:JoinSide } | { type: 'snap'; id: string };
+export function joinStatus(beds:Bed[],id:string,targetId:string,side:JoinSide){const candidate=snapBed(beds,id,targetId,side);const errors=collisions(beds.map(b=>b.id===id?candidate:b))[id];return {candidate,errors,valid:errors.length===0};}
+export type Action = {type:'load';layout:Layout} | {type:'bed-level';id:string;delta:1|-1} | {type:'clear'} | {type:'restore';layout:Layout} | {type:'shelf-level';id:string;delta:1|-1} | { type: 'add'; levels: 1 | 2 | 3; kind?:'bed'|'shelf' } | { type: 'update'; id: string; patch: Partial<Bed> } | { type: 'remove'; id: string } | { type: 'select'; id: string | null } | { type: 'join'; id: string; targetId: string; side?:JoinSide } | { type: 'snap'; id: string };
 export function nextLayout(state: Layout, action: Action): Layout {
+  if(action.type==='load'){if(!Array.isArray(action.layout?.beds))throw Error('Niepoprawny projekt.');action.layout.beds.forEach(validate);return {beds:action.layout.beds,selected:action.layout.selected};}
+  if(action.type==='bed-level'){const b=state.beds.find(v=>v.id===action.id);if(!b||b.kind==='shelf')throw Error('Wybierz pryczę.');let changed:Bed;if(action.delta===1){if(b.levels===3)throw Error('Maksymalnie trzy poziomy.');changed=b.levels===1?{...b,levels:2,upper:b.upper>=b.lower+10?b.upper:b.lower+85}:{...b,levels:3,middle:b.upper,upper:b.upper+(b.upper-b.lower)};}else{if(b.levels===1)throw Error('Prycza musi mieć przynajmniej jeden poziom.');changed=b.levels===3?{...b,levels:2,upper:b.middle,middle:undefined} as Bed:{...b,levels:1};}validate(changed);return {...state,beds:state.beds.map(v=>v.id===b.id?changed:v)};}
+  if(action.type==='clear')return {beds:[],selected:null};
+  if(action.type==='restore'){action.layout.beds.forEach(validate);return {beds:[...state.beds,...action.layout.beds.filter(b=>!state.beds.some(v=>v.id===b.id))],selected:action.layout.selected};}
+  if(action.type==='shelf-level'){const b=state.beds.find(b=>b.id===action.id);if(!b||b.kind!=='shelf')throw Error('Wybierz regał.');const changed=validate({...b,shelfCount:(b.shelfCount||3)+action.delta,middle:(b.lower+b.upper)/2});return {...state,beds:state.beds.map(v=>v.id===b.id?changed:v)};}
   if (action.type === 'select') { if (action.id && !state.beds.some(b => b.id === action.id)) throw Error('Nie znaleziono pryczy.'); return { ...state, selected: action.id }; }
   if (action.type === 'add') {
     let b: Bed = validate({ id: crypto.randomUUID(), levels: action.levels, kind:action.kind, ...(action.kind==='shelf'?shelfDefaults:defaults) }), found = false;
@@ -172,4 +179,5 @@ export function nextLayout(state: Layout, action: Action): Layout {
   if (Object.keys(action.patch).some(k => !allowed.includes(k))) throw Error('Nieznany parametr pryczy.');
   return { ...state, beds: state.beds.map(b => b.id === action.id ? validate({ ...b, ...action.patch }) : b) };
 }
+
 
