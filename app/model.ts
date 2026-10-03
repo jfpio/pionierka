@@ -2,9 +2,9 @@ export type Bed = { id: string; kind?: 'bed' | 'shelf'; levels: 1 | 2 | 3; middl
 export type Point = [number, number, number];
 export type Part = { a: Point; b: Point; radius: number };
 export type Member = Part & { kind: 'post' | 'rail'; owners: string[]; joints: number[] };
-export const defaults = { width: 80, length: 180, lower: 50, upper: 150, x: 0, z: 0, rotation: 0 };
+export const defaults = { width: 75, length: 185, lower: 35, upper: 120, x: 0, z: 0, rotation: 0 };
 export const EDGE_CLEARANCE = 20;
-export const shelfDefaults = {...defaults, width:80,length:40,lower:30,middle:75,upper:120};
+export const shelfDefaults = {...defaults, width:90,length:30,lower:45,middle:90,upper:135};
 export const itemName = (b:Bed) => b.kind === 'shelf' ? 'Regał trzypoziomowy' : b.levels === 1 ? 'Prycza jednopoziomowa' : 'Prycza dwupoziomowa';
 const EPS = 1e-6;
 export const heights = (b: Bed) => b.levels === 3 ? [b.lower,b.middle!,b.upper] : b.levels === 2 ? [b.lower, b.upper] : [b.lower];

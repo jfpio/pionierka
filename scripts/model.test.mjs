@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {defaults,shelfDefaults,bounds,parts,members,assembly,roofCollision,collisions,nextLayout,validate,connected,materialList,clearance} from '../app/model.ts';
-const bed=(patch={})=>({id:'a',levels:2,...defaults,...patch});
-const shelf=(patch={})=>({id:'s',kind:'shelf',levels:3,...shelfDefaults,...patch});
+const bed=(patch={})=>({id:'a',levels:2,...defaults,width:80,length:180,lower:50,upper:150,...patch});
+const shelf=(patch={})=>({id:'s',kind:'shelf',levels:3,...shelfDefaults,width:80,length:40,lower:30,middle:75,upper:120,...patch});
 const approx=(a,b)=>assert.ok(Math.abs(a-b)<1e-6,`${a} != ${b}`);
 test('usable dimensions exclude poles, physical footprint remains checked',()=>{const b=bed();assert.deepEqual(bounds(b),{minX:-48,maxX:48,minZ:-98,maxZ:98});for(const axis of [0,2]){const p=parts(b),min=Math.min(...p.map(s=>Math.min(s.a[axis],s.b[axis])-(s.a[axis]===s.b[axis]?s.radius:0))),max=Math.max(...p.map(s=>Math.max(s.a[axis],s.b[axis])+(s.a[axis]===s.b[axis]?s.radius:0)));assert.equal(max-min,axis===0?96:196)}});
 test('posts end at highest surface for beds and shelf',()=>{for(const b of [bed({levels:1}),bed(),shelf()])assert.equal(Math.max(...parts(b).flatMap(p=>[p.a[1],p.b[1]])),b.levels===1?50:b.upper)});
@@ -19,3 +19,5 @@ test('partial aligned rails merge once without losing their lengths',()=>{const 
 test('accidental overlap does not count as connection',()=>{const a=bed(),b=bed({id:'b',x:70});assert.equal(connected(a,b),false);assert.equal(materialList([a,b]).saved,0);assert.ok(collisions([a,b]).a.length)});
 test('snap, separate, join and remove keep materials consistent',()=>{let s={beds:[bed({x:-88}),bed({id:'b',x:5})],selected:'b'};s=nextLayout(s,{type:'snap',id:'b'});assert.equal(connected(...s.beds),true);s=nextLayout(s,{type:'update',id:'b',patch:{x:30}});assert.equal(materialList(s.beds).saved,0);s=nextLayout(s,{type:'join',id:'b',targetId:'a'});assert.equal(connected(...s.beds),true);s=nextLayout(s,{type:'remove',id:'a'});assert.equal(materialList(s.beds).poles,12)});
 test('shelf dimensions and heights use shared state and validation',()=>{let s=nextLayout({beds:[],selected:null},{type:'add',kind:'shelf',levels:3});assert.equal(collisions(s.beds)[s.selected].length,0);s=nextLayout(s,{type:'update',id:s.selected,patch:{width:90,length:45,upper:140,middle:80}});assert.equal(s.beds[0].upper,140);assert.throws(()=>nextLayout(s,{type:'update',id:s.selected,patch:{upper:70}}));assert.throws(()=>validate(shelf({middle:NaN})));assert.throws(()=>validate(bed({width:0})));assert.throws(()=>validate(bed({x:NaN})));assert.throws(()=>validate(bed({upper:50})))});
+
+test('catalog uses Agricola bed and three-person shelf dimensions',()=>{let s=nextLayout({beds:[],selected:null},{type:'add',levels:2});assert.deepEqual([s.beds[0].width,s.beds[0].length,s.beds[0].lower,s.beds[0].upper],[75,185,35,120]);s=nextLayout(s,{type:'add',kind:'shelf',levels:3});const b=s.beds[1];assert.deepEqual([b.width,b.length,b.lower,b.middle,b.upper],[90,30,45,90,135]);assert.deepEqual(materialList([b]).boards[0],{width:90,length:30});});
