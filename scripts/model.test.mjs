@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {defaults,bounds,parts,roofCollision,collisions,nextLayout,validate} from '../app/model.ts';
+const bed=(patch={})=>({id:'a',levels:2,...defaults,...patch});
+test('external footprint includes 8 cm poles',()=>{const b=bed();assert.deepEqual(bounds(b),{minX:-40,maxX:40,minZ:-90,maxZ:90});const p=parts(b);for(const axis of [0,2]){const min=Math.min(...p.map(s=>Math.min(s.a[axis],s.b[axis])-(s.a[axis]===s.b[axis]?s.radius:0)));const max=Math.max(...p.map(s=>Math.max(s.a[axis],s.b[axis])+(s.a[axis]===s.b[axis]?s.radius:0)));assert.equal(max-min,axis===0?80:180);}});
+test('rotation swaps footprint',()=>assert.deepEqual(bounds(bed({rotation:90})),{minX:-90,maxX:90,minZ:-40,maxZ:40}));
+test('bunk at ridge fits, raised bunk collides under slope',()=>{assert.equal(roofCollision(bed()),false);assert.equal(roofCollision(bed({upper:180,x:150})),true);assert.equal(roofCollision(bed({upper:180,x:0})),false)});
+test('post tips matter near walls',()=>{assert.equal(roofCollision(bed({x:160})),true);assert.equal(roofCollision(bed({x:150})),false)});
+test('wall crossing and exact boundary',()=>{assert.equal(collisions([bed({x:161,levels:1})]).a.length,1);assert.equal(collisions([bed({x:160,levels:1})]).a.length,0)});
+test('overlap is symmetric, touching is allowed',()=>{const a=bed(),b=bed({id:'b',x:70});const issues=collisions([a,b]);assert.equal(issues.a.length,1);assert.equal(issues.b.length,1);assert.equal(collisions([a,{...b,x:80}]).a.length,0)});
+test('invalid dimensions and heights reject without changing original',()=>{assert.throws(()=>validate(bed({width:0})));assert.throws(()=>validate(bed({upper:50})));assert.throws(()=>validate(bed({x:NaN})));const s={beds:[bed()],selected:'a'};assert.throws(()=>nextLayout(s,{type:'update',id:'a',patch:{length:-1}}));assert.equal(s.beds[0].length,180)});
+test('add, update, select, delete share consistent state',()=>{let s=nextLayout({beds:[],selected:null},{type:'add',levels:1});assert.equal(s.beds.length,1);const id=s.selected;s=nextLayout(s,{type:'update',id,patch:{rotation:90,width:90}});assert.equal(s.beds[0].width,90);s=nextLayout(s,{type:'remove',id});assert.equal(s.beds.length,0);assert.equal(s.selected,null)});
+test('roof detection does not depend on display visibility',()=>{const s=bed({upper:240});assert.equal(collisions([s]).a.includes('Żerdzie przecinają skos dachu.'),true)});
