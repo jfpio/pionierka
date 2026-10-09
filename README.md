@@ -12,7 +12,7 @@ Interaktywny projektant prycz i regałów do namiotu harcerskiego z edytowalnymi
 - Edycja szerokości, długości oraz wysokości ścian i kalenicy namiotu; parametry są zapisywane razem z projektem.
 - Przełącznik „Zastrzały” dla całego projektu: ukośne podpory pod najwyższym poziomem, osobne zestawienie ich długości i liczby bez narzucania średnicy.
 - Widok 3D oraz widoki z góry, od wejścia i z boku; możliwość ukrycia dachu.
-- Łączenie konstrukcji ze wspólnymi żerdziami i podgląd dopasowania przed połączeniem.
+- Łączenie konstrukcji ze wspólnymi żerdziami i podgląd dopasowania przed połączeniem. Poprzeczki przy wspólnych pionach pozostają na każdym połączonym poziomie i są liczone raz; podgląd płótna odsłania je na styku prycz.
 - Sprawdzanie kolizji między konstrukcjami, z dachem i trzema masztami oraz odstępu od boków i tyłu namiotu.
 - Zestawienie żerdzi, materiału na posłania i desek na półki, z uwzględnieniem wspólnych elementów.
 - Cofanie i ponawianie zmian, zapis i otwieranie projektów w pamięci przeglądarki.

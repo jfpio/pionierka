@@ -132,6 +132,28 @@ export function assembly(beds: Bed[], construction: Construction = DEFAULT_CONST
   }
   return result;
 }
+// Leave the shared beams visible between adjacent platforms; this is a display outline,
+// not a change to mattress dimensions or the material quantities.
+export function surfaceBounds(b:Bed,height:number,all:Member[],construction:Construction=DEFAULT_CONSTRUCTION) {
+  const rect={minX:-b.width/2,maxX:b.width/2,minZ:-b.length/2,maxZ:b.length/2};
+  if(b.kind==='shelf')return rect;
+  const r=construction.poleDiameter/2,t=b.rotation*Math.PI/180;
+  const local=(p:Point)=>[(p[0]-b.x)*Math.cos(t)-(p[2]-b.z)*Math.sin(t),(p[0]-b.x)*Math.sin(t)+(p[2]-b.z)*Math.cos(t)];
+  const insetX=Math.min(r,b.width/4),insetZ=Math.min(r,b.length/4);
+  for(const m of all){
+    if(m.kind!=='rail'||m.owners.length<2||!m.owners.includes(b.id)||Math.abs(m.a[1]+r-height)>EPS)continue;
+    const a=local(m.a),end=local(m.b);
+    if(Math.abs(a[0]-end[0])<EPS){
+      if(Math.abs(a[0]+b.width/2)<EPS)rect.minX=-b.width/2+insetX;
+      if(Math.abs(a[0]-b.width/2)<EPS)rect.maxX=b.width/2-insetX;
+    }
+    if(Math.abs(a[1]-end[1])<EPS){
+      if(Math.abs(a[1]+b.length/2)<EPS)rect.minZ=-b.length/2+insetZ;
+      if(Math.abs(a[1]-b.length/2)<EPS)rect.maxZ=b.length/2-insetZ;
+    }
+  }
+  return rect;
+}
 export function braceAssembly(beds:Bed[],construction:Construction=DEFAULT_CONSTRUCTION):Brace[] {
   const result:Brace[]=[],byId=new Map(beds.map(b=>[b.id,b]));
   const same=(p:Point,q:Point)=>p.every((n,i)=>Math.abs(n-q[i])<EPS);

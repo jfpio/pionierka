@@ -266,3 +266,54 @@ test('invalid mattress settings reject the entire edit without changing existing
  assert.equal(JSON.stringify(original),snapshot);
  assert.throws(()=>nextLayout(original,{type:'load',layout:{...original,construction:{...DEFAULT_CONSTRUCTION,mattressLength:null}}}));
 });
+
+import {surfaceBounds} from '../app/model.ts';
+test('end-to-end beds retain one middle crossbar at both sleeping levels',()=>{
+ const beds=[{id:'left',levels:2,...defaults,x:-120,z:-92.5},{id:'right',levels:2,...defaults,x:-120,z:92.5}];
+ const all=assembly(beds),middle=all.filter(m=>m.kind==='rail'&&m.owners.length===2);
+ assert.equal(middle.length,2);
+ assert.deepEqual(middle.map(m=>m.a[1]+4),[35,120]);
+ for(const rail of middle){approx(rail.a[2],0);approx(rail.b[2],0);approx(rail.b[0]-rail.a[0],81)}
+ const rows=materialList(beds).rows;
+ assert.deepEqual(rows.filter(r=>r.kind==='rail').map(r=>[r.length,r.count]),[[81,6],[191,8]]);
+ for(const h of [35,120]){
+  const left=surfaceBounds(beds[0],h,all),right=surfaceBounds(beds[1],h,all);
+  approx(left.maxZ,88.5);approx(right.minZ,-88.5);
+  approx(beds[1].z+right.minZ-(beds[0].z+left.maxZ),8);
+ }
+ assert.deepEqual(materialList(beds).fabrics.map(f=>[f.width,f.length]),[[75,185],[75,185],[75,185],[75,185]]);
+});
+test('shared crossbars remain visible after rotation and with an edited pole diameter',()=>{
+ const construction={...DEFAULT_CONSTRUCTION,poleDiameter:12,notchLength:9};
+ for(const rotation of [0,90,180,270]){
+  const centers=[-92.5,92.5].map(z=>world([0,0,z],{x:0,z:0,rotation}));
+  const beds=centers.map((p,i)=>({id:String(i),levels:2,...defaults,x:p[0],z:p[2],rotation})),all=assembly(beds,construction);
+  assert.equal(all.filter(m=>m.kind==='rail'&&m.owners.length===2).length,2);
+  approx(surfaceBounds(beds[0],120,all,construction).maxZ,86.5);
+  approx(surfaceBounds(beds[1],35,all,construction).minZ,-86.5);
+  assert.deepEqual(materialList(beds,construction).rows.filter(r=>r.kind==='rail').map(r=>[r.length,r.count]),[[84,6],[194,8]]);
+ }
+});
+test('only shared levels reveal beams and separating a bed restores its full surface outline',()=>{
+ const beds=[{id:'a',levels:2,...defaults,z:-92.5},{id:'b',levels:2,...defaults,z:92.5,upper:150}],all=assembly(beds);
+ assert.equal(all.filter(m=>m.kind==='rail'&&m.owners.length===2).length,1);
+ approx(surfaceBounds(beds[0],35,all).maxZ,88.5);
+ approx(surfaceBounds(beds[0],120,all).maxZ,92.5);
+ approx(surfaceBounds(beds[1],150,all).minZ,-92.5);
+ const separated=[beds[0],{...beds[1],z:200}],detached=assembly(separated);
+ assert.equal(detached.filter(m=>m.kind==='rail'&&m.owners.length===2).length,0);
+ assert.deepEqual(surfaceBounds(beds[0],35,detached),{minX:-37.5,maxX:37.5,minZ:-92.5,maxZ:92.5});
+});
+test('long-side connections expose the shared longitudinal rail without adding duplicates',()=>{
+ const beds=[{id:'a',levels:2,...defaults,x:-37.5},{id:'b',levels:2,...defaults,x:37.5}],all=assembly(beds);
+ for(const h of [35,120]){approx(surfaceBounds(beds[0],h,all).maxX,33.5);approx(surfaceBounds(beds[1],h,all).minX,-33.5)}
+ assert.deepEqual(materialList(beds).rows.filter(r=>r.kind==='rail').map(r=>[r.length,r.count]),[[81,8],[191,6]]);
+});
+
+
+test('shelf boards keep their full outline when a shared rail is exposed on the adjacent bed',()=>{
+ const beds=[bed({x:-40,upper:120,lower:30}),shelf({x:40})],all=assembly(beds);
+ assert.ok(all.some(m=>m.kind==='rail'&&m.owners.length>1));
+ assert.deepEqual(surfaceBounds(beds[1],120,all),{minX:-40,maxX:40,minZ:-20,maxZ:20});
+ assert.deepEqual(materialList(beds).boards[0],{width:80,length:40});
+});
