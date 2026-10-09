@@ -1,7 +1,7 @@
 import {Feather,Download} from 'lucide-react';
 
 const authorUrl='https://www.jakobstaf.pl/o-nas/druzyna-jakobstaf/robert-chalimoniuk';
-const pdfUrl='/materialy/pionierka-obozowa-orzel.pdf';
+const pdfUrl='./materialy/pionierka-obozowa-orzel.pdf';
 
 export default function Advice() {
   return <section className="advice-page" aria-label={'Porady pionierkowe "Orła"'}><div className="advice-wrap">
