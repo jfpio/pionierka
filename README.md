@@ -17,7 +17,7 @@ Interaktywny projektant prycz i regałów do namiotu harcerskiego z edytowalnymi
 - Zestawienie żerdzi, materiału na posłania i desek na półki, z uwzględnieniem wspólnych elementów.
 - Cofanie i ponawianie zmian, zapis i otwieranie projektów w pamięci przeglądarki.
 - Drukowanie projektu; zapis do PDF przez okno drukowania przeglądarki.
-- „Porady pionierkowe "Orła"”: oryginalny skrypt instruktorski Agricola ’12 do pobrania w PDF.
+- „Porady pionierkowe "Orła"”: oryginalny skrypt instruktorski Agricola ’12 z podglądem PDF na stronie, możliwością otwarcia w osobnej karcie i pobrania.
 
 ## Uruchomienie lokalne
 
@@ -57,7 +57,7 @@ Aplikacja wykorzystuje React, TypeScript, Three.js i Tailwind CSS. Działa na Vi
 
 - `app/` — projektant, model geometrii, scena 3D, zapis projektów, raport do druku i porady.
 - `github-pages/` i `vite.pages.config.ts` — statyczny build tego samego projektanta dla GitHub Pages.
-- `public/materialy/pionierka-obozowa-orzel.pdf` — oryginalny skrypt instruktorski do pobrania.
+- `public/materialy/pionierka-obozowa-orzel.pdf` — oryginalny skrypt instruktorski dostępny w podglądzie i do pobrania.
 - `scripts/model.test.mjs` — testy modelu.
 - `.openai/hosting.json` — powiązanie projektu z istniejącą stroną Sites.
 

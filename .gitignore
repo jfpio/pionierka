@@ -46,3 +46,5 @@ next-env.d.ts
 /.codex/
 /outputs/
 /work/
+# Generated from the pinned PDF.js package before preview/build.
+/public/pdf.worker.min.mjs
