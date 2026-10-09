@@ -7,7 +7,8 @@ Interaktywny projektant prycz i regałów do namiotu harcerskiego z edytowalnymi
 ## Możliwości
 
 - Dodawanie prycz i regałów, zmiana wymiarów i liczby poziomów, przesuwanie oraz obracanie konstrukcji.
-- Globalna edycja średnicy żerdzi i długości zaciosa dla całego projektu; domyślnie 8 i 6 cm. Długość belki to wymiar użytkowy plus dwa zaciosy (np. 75 + 2 × 6 = 87 cm).
+- Globalna edycja średnicy żerdzi i długości zaciosa dla całego projektu; domyślnie 8 i 6 cm. Wymiary konstrukcji oznaczają rozstaw osi żerdzi. Zacios jest wyśrodkowany na osi pionu: długość belki to rozstaw osi plus połówka zaciosa na każdym końcu (np. 75 + 3 + 3 = 81 cm, 185 + 3 + 3 = 191 cm).
+- Globalne wymiary materaca (domyślnie 75 × 185 cm); zmiana szerokości lub długości dopasowuje odpowiedni rozstaw osi wszystkich prycz i jest używana przy dodawaniu kolejnych. Regały zachowują własne wymiary.
 - Edycja szerokości, długości oraz wysokości ścian i kalenicy namiotu; parametry są zapisywane razem z projektem.
 - Przełącznik „Zastrzały” dla całego projektu: ukośne podpory pod najwyższym poziomem, osobne zestawienie ich długości i liczby bez narzucania średnicy.
 - Widok 3D oraz widoki z góry, od wejścia i z boku; możliwość ukrycia dachu.
@@ -79,7 +80,7 @@ GitHub Pages korzysta z tego samego komponentu projektanta i zapisu w przegląda
 
 Domyślny namiot ma 400 × 500 cm, 160 cm wysokości przy ścianie i 250 cm w kalenicy. Te wymiary można zmienić w panelu parametrów namiotu; widok 3D, sprawdzanie dopasowania i wydruk korzystają z aktualnych wartości. Model przyjmuje trzy maszty o średnicy 8 cm. Od boków i tyłu wymagany jest odstęp co najmniej 20 cm; przy wejściu nie jest wymagany odstęp.
 
-Średnica żerdzi i długość zaciosa są niezależnymi ustawieniami całego projektu, wspólnymi dla wszystkich prycz i regałów. Domyślne 6 cm zaciosa to rekomendacja autora aplikacji (3/4 domyślnej średnicy 8 cm), nie wymiar narzucony przez skrypt Orła. Starsze zapisy bez tych parametrów korzystają z wartości 8 i 6 cm. Maszty namiotu zachowują średnicę 8 cm. Zastrzały są domyślnie wyłączone, także w starszych zapisach; ich stan zapisuje się razem z projektem. Grubość zastrzałów w podglądzie ma charakter graficzny i nie określa średnicy materiału.
+Średnica żerdzi i długość zaciosa są niezależnymi ustawieniami całego projektu, wspólnymi dla wszystkich prycz i regałów. Domyślne 6 cm zaciosa to rekomendacja autora aplikacji (3/4 domyślnej średnicy 8 cm), nie wymiar narzucony przez skrypt Orła. Starsze zapisy bez tych parametrów korzystają z wartości 8 i 6 cm oraz materaca 75 × 185 cm. Zapisane szerokości i długości konstrukcji są odczytywane jako rozstaw osi; ich wartości i pozycje pozostają zachowane. Obrys uwzględnia połówkę średnicy żerdzi lub połówkę długości zaciosa po każdej stronie — zależnie od tego, która wartość jest większa. Maszty namiotu zachowują średnicę 8 cm. Zastrzały są domyślnie wyłączone, także w starszych zapisach; ich stan zapisuje się razem z projektem. Grubość zastrzałów w podglądzie ma charakter graficzny i nie określa średnicy materiału.
 
 Projektant sprawdza geometrię konstrukcji. Nie ocenia ich wytrzymałości ani przestrzeni potrzebnej śpiącej osobie. Porady kursowe są materiałem pomocniczym; nie wszystkie ich zalecenia są automatycznymi regułami projektanta.
 

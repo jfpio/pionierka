@@ -4,16 +4,20 @@ export type Part = { a: Point; b: Point; radius: number };
 export type Member = Part & { kind: 'post' | 'rail'; owners: string[]; joints: number[] };
 export type Brace = Part & {kind:'brace';owners:string[]};
 export const defaults = { width: 75, length: 185, lower: 35, upper: 120, x: 0, z: 0, rotation: 0 };
-export type Construction = { poleDiameter: number; notchLength: number; braces?: boolean };
-export const DEFAULT_CONSTRUCTION: Readonly<Construction> = Object.freeze({poleDiameter:8,notchLength:6,braces:false});
+export type Construction = { poleDiameter: number; notchLength: number; braces?: boolean; mattressWidth?: number; mattressLength?: number };
+export const DEFAULT_CONSTRUCTION: Readonly<Construction> = Object.freeze({poleDiameter:8,notchLength:6,braces:false,mattressWidth:75,mattressLength:185});
+export const mattressDimensions = (construction: Construction = DEFAULT_CONSTRUCTION) => ({width:construction.mattressWidth??75,length:construction.mattressLength??185});
 export const poleDiameter = (construction: Construction = DEFAULT_CONSTRUCTION) => construction.poleDiameter;
 export const notchLength = (construction: Construction = DEFAULT_CONSTRUCTION) => construction.notchLength;
-export const envelope = (construction: Construction = DEFAULT_CONSTRUCTION) => Math.max(construction.poleDiameter, construction.notchLength);
+export const envelope = (construction: Construction = DEFAULT_CONSTRUCTION) => Math.max(construction.poleDiameter, construction.notchLength) / 2;
 export function validateConstruction(construction: Construction): Construction {
   if (!Number.isFinite(construction?.poleDiameter) || construction.poleDiameter < 2 || construction.poleDiameter > 30) throw Error('Średnica żerdzi: 2–30 cm.');
   if (!Number.isFinite(construction?.notchLength) || construction.notchLength < 1 || construction.notchLength > 30) throw Error('Długość zaciosa: 1–30 cm.');
   if (construction.braces !== undefined && typeof construction.braces !== 'boolean') throw Error('Zastrzały: wybierz włączone lub wyłączone.');
-  return {poleDiameter:construction.poleDiameter,notchLength:construction.notchLength,braces:construction.braces??false};
+  if (construction.mattressWidth === null || construction.mattressLength === null) throw Error('Wpisz poprawne wymiary materaca.');
+  const mattress=mattressDimensions(construction);
+  if (!Number.isFinite(mattress.width) || mattress.width < 40 || mattress.width > 250 || !Number.isFinite(mattress.length) || mattress.length < 100 || mattress.length > 250) throw Error('Materac: szerokość 40–250 cm, długość 100–250 cm.');
+  return {poleDiameter:construction.poleDiameter,notchLength:construction.notchLength,braces:construction.braces??false,mattressWidth:mattress.width,mattressLength:mattress.length};
 }
 export type Tent = { width: number; length: number; wallHeight: number; ridgeHeight: number };
 export const DEFAULT_TENT: Readonly<Tent> = Object.freeze({ width: 400, length: 500, wallHeight: 160, ridgeHeight: 250 });
@@ -39,17 +43,17 @@ export const top = (b: Bed) => b.levels > 1 ? b.upper : b.lower;
 
 export function members(b: Bed, construction: Construction = DEFAULT_CONSTRUCTION): Member[] {
   const out: Member[] = [];
-  const radius = poleDiameter(construction) / 2, end = notchLength(construction);
-  for (const x of [-b.width / 2 - radius, b.width / 2 + radius]) {
-    for (const z of [-b.length / 2 - radius, b.length / 2 + radius]) {
+  const radius = poleDiameter(construction) / 2, end = notchLength(construction) / 2;
+  for (const x of [-b.width / 2, b.width / 2]) {
+    for (const z of [-b.length / 2, b.length / 2]) {
       out.push({ a: [x, 0, z], b: [x, top(b), z], radius, kind: 'post', owners: [b.id], joints: heights(b) });
     }
   }
   for (const h of heights(b)) {
-    for (const x of [-b.width / 2 - radius, b.width / 2 + radius]) {
+    for (const x of [-b.width / 2, b.width / 2]) {
       out.push({ a: [x, h - radius, -b.length / 2 - end], b: [x, h - radius, b.length / 2 + end], radius, kind: 'rail', owners: [b.id], joints: [] });
     }
-    for (const z of [-b.length / 2 - radius, b.length / 2 + radius]) {
+    for (const z of [-b.length / 2, b.length / 2]) {
       out.push({ a: [-b.width / 2 - end, h - radius, z], b: [b.width / 2 + end, h - radius, z], radius, kind: 'rail', owners: [b.id], joints: [] });
     }
   }
@@ -63,7 +67,7 @@ export function splitMember(m: Member): Part[] {
 }
 export function braces(b:Bed,construction:Construction=DEFAULT_CONSTRUCTION):Brace[] {
   if(!construction.braces)return [];
-  const r=construction.poleDiameter/2,halfX=b.width/2+r,halfZ=b.length/2+r,y=top(b)-r;
+  const r=construction.poleDiameter/2,halfX=b.width/2,halfZ=b.length/2,y=top(b)-r;
   // Display thickness only; the material list deliberately does not specify a brace diameter.
   const radius=Math.min(1,r/2),runX=Math.min(40,2*halfX/3,y-radius),runZ=Math.min(40,2*halfZ/3,y-radius);
   const result:Brace[]=[];
@@ -87,7 +91,7 @@ export function clearance(b: Bed, tent: Tent = DEFAULT_TENT, construction: Const
 export function connected(a: Bed, b: Bed, construction: Construction = DEFAULT_CONSTRUCTION) {
  const diameter=poleDiameter(construction);
  if(a.id===b.id)return false;
- const p=bounds(a,construction,diameter),q=bounds(b,construction,diameter);
+ const p=bounds(a,construction,diameter/2),q=bounds(b,construction,diameter/2);
  const overlapX=Math.min(p.maxX,q.maxX)-Math.max(p.minX,q.minX);
  const overlapZ=Math.min(p.maxZ,q.maxZ)-Math.max(p.minZ,q.minZ);
  return (Math.abs(overlapX-diameter)<EPS && overlapZ>diameter+EPS) || (Math.abs(overlapZ-diameter)<EPS && overlapX>diameter+EPS);
@@ -114,7 +118,7 @@ export function assembly(beds: Bed[], construction: Construction = DEFAULT_CONST
         const sharedSpan=o.owners.some(id=>m.owners.some(other=>{
           const left=byId.get(id)!,right=byId.get(other)!;
           if(!connected(left,right,construction))return false;
-          const d=poleDiameter(construction),p=bounds(left,construction,d),q=bounds(right,construction,d);
+          const d=poleDiameter(construction),p=bounds(left,construction,d/2),q=bounds(right,construction,d/2);
           return axis===0?Math.min(p.maxX,q.maxX)-Math.max(p.minX,q.minX)>d+EPS:Math.min(p.maxZ,q.maxZ)-Math.max(p.minZ,q.minZ)>d+EPS;
         }));
         if(!sharedSpan)continue;
@@ -210,7 +214,7 @@ export function validate(b: Bed, construction: Construction = DEFAULT_CONSTRUCTI
 export type JoinSide='left'|'right'|'back'|'front';
 function joinCandidates(b:Bed, other:Bed, side:JoinSide|undefined, construction:Construction){
  const diameter=poleDiameter(construction);
- const a=bounds({...b,x:0,z:0},construction,diameter),o=bounds(other,construction,diameter),xs=[o.minX-a.minX,o.maxX-a.maxX],zs=[o.minZ-a.minZ,o.maxZ-a.maxZ];
+ const a=bounds({...b,x:0,z:0},construction,diameter/2),o=bounds(other,construction,diameter/2),xs=[o.minX-a.minX,o.maxX-a.maxX],zs=[o.minZ-a.minZ,o.maxZ-a.maxZ];
  return ([['left',o.minX-a.maxX+diameter,zs],['right',o.maxX-a.minX-diameter,zs],['back',o.minZ-a.maxZ+diameter,xs],['front',o.maxZ-a.minZ-diameter,xs]] as [JoinSide,number,number[]][]).filter(([s])=>!side||side===s).flatMap(([s,fixed,positions])=>positions.map(p=>({...b,x:s==='left'||s==='right'?fixed:p,z:s==='left'||s==='right'?p:fixed})));
 }
 export function snapBed(beds: Bed[], id: string, targetId?: string, side?:JoinSide, tent: Tent = DEFAULT_TENT, construction: Construction = DEFAULT_CONSTRUCTION) {
@@ -232,10 +236,12 @@ export function nextLayout(state: Layout, action: Action): Layout {
   const tent = state.tent ?? DEFAULT_TENT;
   const construction = state.construction ?? DEFAULT_CONSTRUCTION;
   if (action.type === 'update-construction') {
-    if (Object.keys(action.patch).some(key=>!['poleDiameter','notchLength','braces'].includes(key))) throw Error('Nieznany parametr konstrukcji.');
+    if (Object.keys(action.patch).some(key=>!['poleDiameter','notchLength','braces','mattressWidth','mattressLength'].includes(key))) throw Error('Nieznany parametr konstrukcji.');
     const changed=validateConstruction({...construction,...action.patch});
-    state.beds.forEach(b=>validate(b,changed));
-    return {...state,construction:changed};
+    const resizeWidth=action.patch.mattressWidth!==undefined,resizeLength=action.patch.mattressLength!==undefined;
+    const beds=resizeWidth||resizeLength?state.beds.map(b=>b.kind==='shelf'?b:{...b,...(resizeWidth?{width:changed.mattressWidth!}:{}),...(resizeLength?{length:changed.mattressLength!}:{})}):state.beds;
+    beds.forEach(b=>validate(b,changed));
+    return {...state,beds,construction:changed};
   }
   if (action.type === 'update-tent') {
     if (Object.keys(action.patch).some(key => !['width','length','wallHeight','ridgeHeight'].includes(key))) throw Error('Nieznany parametr namiotu.');
@@ -249,7 +255,7 @@ export function nextLayout(state: Layout, action: Action): Layout {
   if(action.type==='shelf-level'){const b=state.beds.find(b=>b.id===action.id);if(!b||b.kind!=='shelf')throw Error('Wybierz regał.');const changed=validate({...b,shelfCount:(b.shelfCount||3)+action.delta,middle:(b.lower+b.upper)/2},construction);return {...state,beds:state.beds.map(v=>v.id===b.id?changed:v)};}
   if (action.type === 'select') { if (action.id && !state.beds.some(b => b.id === action.id)) throw Error('Nie znaleziono pryczy.'); return { ...state, selected: action.id }; }
   if (action.type === 'add') {
-    let b: Bed = validate({ id: crypto.randomUUID(), levels: action.levels, kind:action.kind, ...(action.kind==='shelf'?shelfDefaults:defaults) },construction), found = false;
+    let b: Bed = validate({ id: crypto.randomUUID(), levels: action.levels, kind:action.kind, ...(action.kind==='shelf'?shelfDefaults:{...defaults,...mattressDimensions(construction)}) },construction), found = false;
     const extra=envelope(construction);
     for (let z = -tent.length/2 + EDGE_CLEARANCE + b.length/2+extra; z <= tent.length/2 - b.length/2-extra && !found; z += 10) for (let x = -tent.width/2 + EDGE_CLEARANCE + b.width/2+extra; x <= tent.width/2 - EDGE_CLEARANCE - b.width/2-extra && !found; x += 10) {
       const candidate = { ...b, x, z };
