@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 
 // Both hosts render the same Planner; Pages only needs the browser bundle.
 export default defineConfig({
-  root: fileURLToPath(new URL('./pages', import.meta.url)),
+  root: fileURLToPath(new URL('./github-pages', import.meta.url)),
   base: process.env.PAGES_BASE_PATH || '/pionierka/',
   publicDir: fileURLToPath(new URL('./public', import.meta.url)),
   plugins: [react()],

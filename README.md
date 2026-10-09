@@ -53,7 +53,7 @@ Na Node.js 24 działa także `node --test scripts/model.test.mjs`. Flaga powyże
 Aplikacja wykorzystuje React, TypeScript, Three.js i Tailwind CSS. Działa na Vinext/Vite z wyjściem dla Cloudflare Workers, a opublikowana wersja jest hostowana w Sites.
 
 - `app/` — projektant, model geometrii, scena 3D, zapis projektów, raport do druku i porady.
-- `pages/` i `vite.pages.config.ts` — statyczny build tego samego projektanta dla GitHub Pages.
+- `github-pages/` i `vite.pages.config.ts` — statyczny build tego samego projektanta dla GitHub Pages.
 - `public/materialy/pionierka-obozowa-orzel.pdf` — oryginalny skrypt instruktorski do pobrania.
 - `scripts/model.test.mjs` — testy modelu.
 - `.openai/hosting.json` — powiązanie projektu z istniejącą stroną Sites.
