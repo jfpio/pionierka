@@ -151,7 +151,7 @@ test('global parameters survive save/load and legacy projects restore defaults',
  const original={beds:[bed()],selected:'a'};
  const changed=nextLayout(original,{type:'update-construction',patch:{poleDiameter:10,notchLength:7}});
  const loaded=nextLayout(original,{type:'load',layout:JSON.parse(JSON.stringify(changed))});
- assert.deepEqual(loaded.construction,{poleDiameter:10,notchLength:7});
+ assert.deepEqual(loaded.construction,{poleDiameter:10,notchLength:7,braces:false});
  assert.deepEqual(nextLayout(changed,{type:'load',layout:original}).construction,DEFAULT_CONSTRUCTION);
  assert.equal(original.construction,undefined);
  for(const patch of [{poleDiameter:NaN},{poleDiameter:null},{poleDiameter:0},{poleDiameter:31},{notchLength:Infinity},{notchLength:'6'},{notchLength:0},{notchLength:31},{unexpected:8}]){
@@ -166,4 +166,55 @@ test('clear retains global settings and a new project resets them',()=>{
  assert.equal(nextLayout(original,{type:'clear'}).construction,original.construction);
  assert.equal(nextLayout(original,{type:'remove',id:'a'}).construction,original.construction);
  assert.deepEqual(nextLayout(original,{type:'reset'}).construction,DEFAULT_CONSTRUCTION);
+});
+
+
+import {braces,braceAssembly,world} from '../app/model.ts';
+test('braces are opt-in and do not affect the main pole list or its diameter',()=>{
+ const beds=[bed(),shelf()],construction={...DEFAULT_CONSTRUCTION,braces:true};
+ const before=materialList(beds),after=materialList(beds,construction);
+ assert.equal(before.braces.count,0);assert.deepEqual(braces(bed()),[]);
+ assert.equal(after.braces.count,16);assert.ok(after.braces.meters>0);
+ for(const key of ['rows','poles','meters','saved','diameters','joints'])assert.deepEqual(after[key],before[key]);
+ assert.ok(after.braces.rows.every(r=>!('diameter' in r)));
+ assert.equal(after.braces.rows.reduce((sum,r)=>sum+r.count,0),16);
+});
+test('eight knee braces fit each model and lengths follow its dimensions and height',()=>{
+ const construction={...DEFAULT_CONSTRUCTION,braces:true};
+ for(const b of [bed({levels:1,lower:35}),bed(),shelf(),shelf({shelfCount:1})]){
+  const supports=braces(b,construction),r=bounds(b,construction),h=Math.max(...members(b).map(m=>m.b[1]));
+  assert.equal(supports.length,8);
+  for(const p of supports){
+   assert.ok(p.b[1]>p.a[1]);assert.ok(p.a[1]>0);assert.ok(p.b[1]<h);
+   assert.ok(p.radius<construction.poleDiameter/2);
+   for(const point of [p.a,p.b]){const q=world(point,b);assert.ok(q[0]>=r.minX&&q[0]<=r.maxX);assert.ok(q[2]>=r.minZ&&q[2]<=r.maxZ)}
+   approx(Math.hypot(p.b[0]-p.a[0],p.b[2]-p.a[2]),p.b[1]-p.a[1]);
+  }
+ }
+ const single=materialList([bed({levels:1,lower:35})],construction),tall=materialList([bed()],construction);
+ assert.ok(single.braces.meters<tall.braces.meters);
+ assert.deepEqual(collisions([bed()],DEFAULT_TENT,construction),collisions([bed()]));
+ assert.ok(parts(bed(),construction).length>parts(bed()).length);
+});
+test('shared braces count once at connected faces, with rotation and accidental overlaps handled',()=>{
+ const construction={...DEFAULT_CONSTRUCTION,braces:true};
+ const a=bed({x:-44}),b=bed({id:'b',x:44}),supports=braceAssembly([a,b],construction);
+ assert.equal(supports.length,14);assert.equal(supports.filter(p=>p.owners.length===2).length,2);
+ for(const rotation of [0,90,180,270]){
+  const one=bed({rotation}),actual=braceAssembly([one],construction);
+  assert.deepEqual(actual.map(p=>[p.a,p.b]),braces(one,construction).map(p=>[world(p.a,one),world(p.b,one)]));
+ }
+ assert.equal(braceAssembly([a,{...a,id:'overlap'}],construction).length,16);
+});
+test('global brace toggle survives save/load, resets and rejects invalid flags',()=>{
+ const original={beds:[bed(),shelf()],selected:'a',construction:{...DEFAULT_CONSTRUCTION}};
+ const changed=nextLayout(original,{type:'update-construction',patch:{braces:true}});
+ assert.equal(changed.beds,original.beds);assert.equal(changed.construction.braces,true);
+ const loaded=nextLayout(original,{type:'load',layout:JSON.parse(JSON.stringify(changed))});
+ assert.equal(loaded.construction.braces,true);
+ assert.equal(nextLayout(changed,{type:'load',layout:{beds:[bed()],selected:'a',construction:{poleDiameter:8,notchLength:6}}}).construction.braces,false);
+ assert.equal(nextLayout(changed,{type:'clear'}).construction.braces,true);
+ assert.equal(nextLayout(changed,{type:'reset'}).construction.braces,false);
+ assert.equal(materialList(changed.beds,nextLayout(changed,{type:'update-construction',patch:{braces:false}}).construction).braces.count,0);
+ for(const braces of [1,'true',null])assert.throws(()=>nextLayout(original,{type:'update-construction',patch:{braces}}));
 });

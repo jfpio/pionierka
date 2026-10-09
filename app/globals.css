@@ -23,3 +23,7 @@
 
 .tent-settings{padding-bottom:18px;margin-bottom:22px;border-bottom:1px solid var(--border)}.tent-settings>.eyebrow{margin-bottom:18px}.tent-settings .numeric label{line-height:1.5}.tent-settings .field-note{margin-bottom:0}
 .advice-wrap{max-width:980px}.advice-hero h1 a{color:inherit;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:8px}.advice-hero>p{max-width:760px}@media(max-width:760px){.advice-hero h1{font-size:39px}.tent-settings{margin-bottom:18px}}
+
+.brace-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;font-size:14px;color:var(--foreground)}
+
+.brace-materials{margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}

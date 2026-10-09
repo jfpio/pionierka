@@ -15,6 +15,14 @@ export function Materials({beds,invalid,construction=DEFAULT_CONSTRUCTION}:{beds
         <TableHeader><TableRow><TableHead>Element</TableHead><TableHead>Długość</TableHead><TableHead>Szt.</TableHead></TableRow></TableHeader>
         <TableBody>{m.rows.map(r=><TableRow key={`${r.kind}:${r.diameter}:${r.length}`}><TableCell>{r.kind==='post'?'Pion':'Belka'}{m.diameters.length>1&&<> Ø {fmt(r.diameter)} cm</>}</TableCell><TableCell>{fmt(r.length)} cm</TableCell><TableCell>{r.count}</TableCell></TableRow>)}</TableBody>
       </Table>
+      {m.braces.count>0&&<section className="brace-materials">
+        <div className="section-label">Zastrzały</div>
+        <div className="material-total"><b>{m.braces.count} szt.</b><span>{fmt(m.braces.meters)} m łącznie</span></div>
+        <Table aria-label="Zastrzały do budowy">
+          <TableHeader><TableRow><TableHead>Długość</TableHead><TableHead>Szt.</TableHead></TableRow></TableHeader>
+          <TableBody>{m.braces.rows.map(r=><TableRow key={r.length}><TableCell>{fmt(r.length)} cm</TableCell><TableCell>{r.count}</TableCell></TableRow>)}</TableBody>
+        </Table>
+      </section>}
       {m.boards.length>0&&<dl>
         <div><dt>Blaty półek (gr. 2,5 cm)</dt><dd>{fmt(m.boards.reduce((n,b)=>n+b.width*b.length/10000,0))} m²</dd></div>
         {m.boards.map((b,i)=><div key={'board'+i}><dt>{fmt(b.width)} × {fmt(b.length)} cm</dt><dd>1 szt.</dd></div>)}

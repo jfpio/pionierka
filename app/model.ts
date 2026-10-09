@@ -2,16 +2,18 @@ export type Bed = { id: string; kind?: 'bed' | 'shelf'; levels: 1 | 2 | 3; middl
 export type Point = [number, number, number];
 export type Part = { a: Point; b: Point; radius: number };
 export type Member = Part & { kind: 'post' | 'rail'; owners: string[]; joints: number[] };
+export type Brace = Part & {kind:'brace';owners:string[]};
 export const defaults = { width: 75, length: 185, lower: 35, upper: 120, x: 0, z: 0, rotation: 0 };
-export type Construction = { poleDiameter: number; notchLength: number };
-export const DEFAULT_CONSTRUCTION: Readonly<Construction> = Object.freeze({poleDiameter:8,notchLength:6});
+export type Construction = { poleDiameter: number; notchLength: number; braces?: boolean };
+export const DEFAULT_CONSTRUCTION: Readonly<Construction> = Object.freeze({poleDiameter:8,notchLength:6,braces:false});
 export const poleDiameter = (construction: Construction = DEFAULT_CONSTRUCTION) => construction.poleDiameter;
 export const notchLength = (construction: Construction = DEFAULT_CONSTRUCTION) => construction.notchLength;
 export const envelope = (construction: Construction = DEFAULT_CONSTRUCTION) => Math.max(construction.poleDiameter, construction.notchLength);
 export function validateConstruction(construction: Construction): Construction {
   if (!Number.isFinite(construction?.poleDiameter) || construction.poleDiameter < 2 || construction.poleDiameter > 30) throw Error('Średnica żerdzi: 2–30 cm.');
   if (!Number.isFinite(construction?.notchLength) || construction.notchLength < 1 || construction.notchLength > 30) throw Error('Długość zaciosa: 1–30 cm.');
-  return {poleDiameter:construction.poleDiameter,notchLength:construction.notchLength};
+  if (construction.braces !== undefined && typeof construction.braces !== 'boolean') throw Error('Zastrzały: wybierz włączone lub wyłączone.');
+  return {poleDiameter:construction.poleDiameter,notchLength:construction.notchLength,braces:construction.braces??false};
 }
 export type Tent = { width: number; length: number; wallHeight: number; ridgeHeight: number };
 export const DEFAULT_TENT: Readonly<Tent> = Object.freeze({ width: 400, length: 500, wallHeight: 160, ridgeHeight: 250 });
@@ -59,7 +61,20 @@ export function splitMember(m: Member): Part[] {
   const cuts = [...new Set([0, m.b[1], ...m.joints.flatMap(h => [h - diameter, h])])].filter(y => y >= 0 && y <= m.b[1]).sort((a, b) => a - b);
   return cuts.slice(1).map((y, i) => ({ a: [m.a[0], cuts[i], m.a[2]], b: [m.a[0], y, m.a[2]], radius: m.joints.some(h => (cuts[i] + y) / 2 >= h - diameter && (cuts[i] + y) / 2 <= h) ? m.radius * .75 : m.radius }));
 }
-export function parts(b: Bed, construction: Construction = DEFAULT_CONSTRUCTION): Part[] { return members(b,construction).flatMap(splitMember); }
+export function braces(b:Bed,construction:Construction=DEFAULT_CONSTRUCTION):Brace[] {
+  if(!construction.braces)return [];
+  const r=construction.poleDiameter/2,halfX=b.width/2+r,halfZ=b.length/2+r,y=top(b)-r;
+  // Display thickness only; the material list deliberately does not specify a brace diameter.
+  const radius=Math.min(1,r/2),runX=Math.min(40,2*halfX/3,y-radius),runZ=Math.min(40,2*halfZ/3,y-radius);
+  const result:Brace[]=[];
+  for(const sx of [-1,1])for(const sz of [-1,1]){
+    const x=sx*halfX,z=sz*halfZ;
+    result.push({a:[x,y-runX,z],b:[x-sx*runX,y,z],radius,kind:'brace',owners:[b.id]});
+    result.push({a:[x,y-runZ,z],b:[x,y,z-sz*runZ],radius,kind:'brace',owners:[b.id]});
+  }
+  return result;
+}
+export function parts(b: Bed, construction: Construction = DEFAULT_CONSTRUCTION): Part[] { return [...members(b,construction).flatMap(splitMember),...braces(b,construction)]; }
 export function world(p: Point, b: Bed): Point {
   const t = b.rotation * Math.PI / 180;
   return [b.x + p[0] * Math.cos(t) + p[2] * Math.sin(t), p[1], b.z - p[0] * Math.sin(t) + p[2] * Math.cos(t)];
@@ -113,6 +128,17 @@ export function assembly(beds: Bed[], construction: Construction = DEFAULT_CONST
   }
   return result;
 }
+export function braceAssembly(beds:Bed[],construction:Construction=DEFAULT_CONSTRUCTION):Brace[] {
+  const result:Brace[]=[],byId=new Map(beds.map(b=>[b.id,b]));
+  const same=(p:Point,q:Point)=>p.every((n,i)=>Math.abs(n-q[i])<EPS);
+  for(const b of beds)for(const brace of braces(b,construction)){
+    const a=world(brace.a,b),end=world(brace.b,b);
+    const existing=result.find(o=>o.owners.some(id=>connected(byId.get(id)!,b,construction))&&((same(o.a,a)&&same(o.b,end))||(same(o.a,end)&&same(o.b,a))));
+    if(existing)existing.owners.push(b.id);
+    else result.push({...brace,a,b:end,owners:[b.id]});
+  }
+  return result;
+}
 export function roofCollision(b: Bed, tent: Tent = DEFAULT_TENT, construction: Construction = DEFAULT_CONSTRUCTION) {
   const slope = (tent.ridgeHeight - tent.wallHeight) / (tent.width / 2);
   return parts(b,construction).some(p => {
@@ -149,6 +175,12 @@ export function materialList(beds: Bed[], construction: Construction = DEFAULT_C
     if (row) row.count++; else rows.set(key, { kind: p.kind, length, diameter, count: 1 });
   }
   const fabrics = beds.filter(b=>b.kind!=='shelf').flatMap(b => heights(b).map(() => ({ width: b.width, length: b.length })));
+  const supports=braceAssembly(beds,construction),braceRows=new Map<number,{length:number;count:number}>();
+  for(const p of supports){
+    const length=Math.round(Math.hypot(...p.b.map((v,i)=>v-p.a[i]))*1000)/1000;
+    const row=braceRows.get(length);
+    if(row)row.count++;else braceRows.set(length,{length,count:1});
+  }
   return {
     rows: [...rows.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.diameter - b.diameter || a.length - b.length),
     diameters: [...new Set(all.map(p=>p.radius*2))].sort((a,b)=>a-b),
@@ -159,6 +191,7 @@ export function materialList(beds: Bed[], construction: Construction = DEFAULT_C
     fabrics,
     fabricArea: fabrics.reduce((n, f) => n + f.width * f.length / 10000, 0),
     joints: all.filter(p => p.kind === 'rail').length * 2,
+    braces:{rows:[...braceRows.values()].sort((a,b)=>a.length-b.length),count:supports.length,meters:supports.reduce((sum,p)=>sum+Math.hypot(...p.b.map((v,i)=>v-p.a[i]))/100,0)},
   };
 }
 export function validate(b: Bed, construction: Construction = DEFAULT_CONSTRUCTION) {
@@ -199,7 +232,7 @@ export function nextLayout(state: Layout, action: Action): Layout {
   const tent = state.tent ?? DEFAULT_TENT;
   const construction = state.construction ?? DEFAULT_CONSTRUCTION;
   if (action.type === 'update-construction') {
-    if (Object.keys(action.patch).some(key=>!['poleDiameter','notchLength'].includes(key))) throw Error('Nieznany parametr konstrukcji.');
+    if (Object.keys(action.patch).some(key=>!['poleDiameter','notchLength','braces'].includes(key))) throw Error('Nieznany parametr konstrukcji.');
     const changed=validateConstruction({...construction,...action.patch});
     state.beds.forEach(b=>validate(b,changed));
     return {...state,construction:changed};
