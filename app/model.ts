@@ -3,10 +3,22 @@ export type Point = [number, number, number];
 export type Part = { a: Point; b: Point; radius: number };
 export type Member = Part & { kind: 'post' | 'rail'; owners: string[]; joints: number[] };
 export const defaults = { width: 75, length: 185, lower: 35, upper: 120, x: 0, z: 0, rotation: 0 };
+export type Tent = { width: number; length: number; wallHeight: number; ridgeHeight: number };
+export const DEFAULT_TENT: Readonly<Tent> = Object.freeze({ width: 400, length: 500, wallHeight: 160, ridgeHeight: 250 });
+export function validateTent(tent: Tent): Tent {
+  for (const key of ['width', 'length', 'wallHeight', 'ridgeHeight'] as const) {
+    if (!Number.isFinite(tent?.[key])) throw Error('Wpisz poprawne wymiary namiotu.');
+  }
+  if (tent.width < 100 || tent.width > 2000 || tent.length < 100 || tent.length > 2000) throw Error('Szerokość i długość namiotu: 100–2000 cm.');
+  if (tent.wallHeight < 50 || tent.wallHeight > 1000 || tent.ridgeHeight < 50 || tent.ridgeHeight > 1000) throw Error('Wysokości namiotu: 50–1000 cm.');
+  if (tent.ridgeHeight < tent.wallHeight) throw Error('Kalenica nie może być niżej niż ściana.');
+  return { width: tent.width, length: tent.length, wallHeight: tent.wallHeight, ridgeHeight: tent.ridgeHeight };
+}
 export const EDGE_CLEARANCE = 20;
 export const MAST_RADIUS=4;
-export const MASTS=[{x:0,z:-250,name:'tylnym'},{x:0,z:0,name:'środkowym'},{x:0,z:250,name:'przy wejściu'}];
-export function mastCollisions(b:Bed){const r=bounds(b);return MASTS.filter(m=>Math.hypot(m.x-Math.max(r.minX,Math.min(r.maxX,m.x)),m.z-Math.max(r.minZ,Math.min(r.maxZ,m.z)))<=MAST_RADIUS+1e-6);}
+export const tentMasts=(tent: Tent = DEFAULT_TENT)=>[{x:0,z:-tent.length/2,name:'tylnym'},{x:0,z:0,name:'środkowym'},{x:0,z:tent.length/2,name:'przy wejściu'}];
+export const MASTS=tentMasts();
+export function mastCollisions(b:Bed,tent: Tent = DEFAULT_TENT){const r=bounds(b);return tentMasts(tent).filter(m=>Math.hypot(m.x-Math.max(r.minX,Math.min(r.maxX,m.x)),m.z-Math.max(r.minZ,Math.min(r.maxZ,m.z)))<=MAST_RADIUS+1e-6);}
 export const shelfDefaults = {...defaults, width:90,length:30,lower:45,middle:90,upper:135};
 export const itemName = (b:Bed) => b.kind === 'shelf' ? 'Regał' : b.levels === 1 ? 'Prycza jednopoziomowa' : b.levels===2 ? 'Prycza dwupoziomowa' : 'Prycza trzypoziomowa';
 const EPS = 1e-6;
@@ -44,7 +56,7 @@ export function bounds(b: Bed) {
   const turned = b.rotation % 180 !== 0;
   return { minX: b.x - ((turned ? b.length : b.width) + 16) / 2, maxX: b.x + ((turned ? b.length : b.width) + 16) / 2, minZ: b.z - ((turned ? b.width : b.length) + 16) / 2, maxZ: b.z + ((turned ? b.width : b.length) + 16) / 2 };
 }
-export function clearance(b: Bed) { const r = bounds(b); return Math.min(r.minX + 200, 200 - r.maxX, r.minZ + 250); }
+export function clearance(b: Bed, tent: Tent = DEFAULT_TENT) { const r = bounds(b); return Math.min(r.minX + tent.width/2, tent.width/2 - r.maxX, r.minZ + tent.length/2); }
 export function connected(a: Bed, b: Bed) {
  if(a.id===b.id)return false;
  const p=bounds(a),q=bounds(b);
@@ -80,24 +92,25 @@ export function assembly(beds: Bed[]): Member[] {
   }
   return result;
 }
-export function roofCollision(b: Bed) {
+export function roofCollision(b: Bed, tent: Tent = DEFAULT_TENT) {
+  const slope = (tent.ridgeHeight - tent.wallHeight) / (tent.width / 2);
   return parts(b).some(p => {
     const a = world(p.a, b), c = world(p.b, b), d = c.map((v, i) => v - a[i]), len = Math.hypot(...d), u = d.map(v => v / len);
     return [-1, 1].some(sign => {
-      const n = [sign * .45, 1, 0], dot = (v: number[]) => v.reduce((s, x, i) => s + x * n[i], 0);
-      const radial = p.radius * Math.sqrt(Math.max(0, 1.2025 - dot(u) ** 2));
-      return Math.max(dot(a), dot(c)) + radial >= 250 - EPS;
+      const n = [sign * slope, 1, 0], dot = (v: number[]) => v.reduce((s, x, i) => s + x * n[i], 0);
+      const radial = p.radius * Math.sqrt(Math.max(0, 1 + slope ** 2 - dot(u) ** 2));
+      return Math.max(dot(a), dot(c)) + radial >= tent.ridgeHeight - EPS;
     });
   });
 }
-export function collisions(beds: Bed[]) {
+export function collisions(beds: Bed[], tent: Tent = DEFAULT_TENT) {
   const result: Record<string, string[]> = {};
   for (const b of beds) {
-    const box = bounds(b), errors: string[] = [], gap = clearance(b);
-    if (Math.min(gap,250-box.maxZ) < -EPS) errors.push('Konstrukcja wychodzi poza obrys namiotu.');
+    const box = bounds(b), errors: string[] = [], gap = clearance(b, tent);
+    if (Math.min(gap,tent.length/2-box.maxZ) < -EPS) errors.push('Konstrukcja wychodzi poza obrys namiotu.');
     if (gap < EDGE_CLEARANCE - EPS) errors.push('Za blisko ściany bocznej lub tylnej — wymagane 20 cm.');
-    for(const mast of mastCollisions(b))errors.push('Konstrukcja koliduje z masztem '+mast.name+'.');
-    if (roofCollision(b)) errors.push('Konstrukcja dotyka lub przecina dach namiotu.');
+    for(const mast of mastCollisions(b, tent))errors.push('Konstrukcja koliduje z masztem '+mast.name+'.');
+    if (roofCollision(b, tent)) errors.push('Konstrukcja dotyka lub przecina dach namiotu.');
     for (const other of beds) {
       if (other.id === b.id || connected(b, other)) continue;
       const o = bounds(other);
@@ -143,41 +156,47 @@ function joinCandidates(b:Bed, other:Bed, side?:JoinSide){
  const a=bounds({...b,x:0,z:0}),o=bounds(other),xs=[o.minX-a.minX,o.maxX-a.maxX],zs=[o.minZ-a.minZ,o.maxZ-a.maxZ];
  return ([['left',o.minX-a.maxX+8,zs],['right',o.maxX-a.minX-8,zs],['back',o.minZ-a.maxZ+8,xs],['front',o.maxZ-a.minZ-8,xs]] as [JoinSide,number,number[]][]).filter(([s])=>!side||side===s).flatMap(([s,fixed,positions])=>positions.map(p=>({...b,x:s==='left'||s==='right'?fixed:p,z:s==='left'||s==='right'?p:fixed})));
 }
-export function snapBed(beds: Bed[], id: string, targetId?: string, side?:JoinSide) {
+export function snapBed(beds: Bed[], id: string, targetId?: string, side?:JoinSide, tent: Tent = DEFAULT_TENT) {
   const b = beds.find(b => b.id === id)!;
   let options = beds.filter(other => other.id !== id && (!targetId || other.id === targetId)).flatMap(other => joinCandidates(b, other, side));
   if (!targetId) options = options.filter(c => Math.hypot(c.x - b.x, c.z - b.z) <= 12);
   options.sort((a, c) => {
-    const score = (candidate: Bed) => collisions(beds.map(v => v.id === id ? candidate : v))[id].length * 100000 + Math.hypot(candidate.x - b.x, candidate.z - b.z);
+    const score = (candidate: Bed) => collisions(beds.map(v => v.id === id ? candidate : v), tent)[id].length * 100000 + Math.hypot(candidate.x - b.x, candidate.z - b.z);
     return score(a) - score(c);
   });
   if (targetId && !options.length) throw Error('Nie znaleziono konstrukcji do połączenia.');
   return options[0] || b;
 }
-export type Layout = { beds: Bed[]; selected: string | null };
-export function dropPreview(beds:Bed[],id:string){if(!beds.some(b=>b.id===id))return null;const candidate=snapBed(beds,id);const partners=beds.filter(b=>connected(candidate,b));if(!partners.length)return null;const projected=beds.map(b=>b.id===id?candidate:b),issues=collisions(projected);if(issues[id].length||partners.some(b=>issues[b.id].length))return null;return {candidate,ids:[id,...partners.map(b=>b.id)],issues};}
-export function joinStatus(beds:Bed[],id:string,targetId:string,side:JoinSide){const candidate=snapBed(beds,id,targetId,side);const errors=collisions(beds.map(b=>b.id===id?candidate:b))[id];return {candidate,errors,valid:errors.length===0};}
-export type Action = {type:'load';layout:Layout} | {type:'bed-level';id:string;delta:1|-1} | {type:'clear'} | {type:'restore';layout:Layout} | {type:'shelf-level';id:string;delta:1|-1} | { type: 'add'; levels: 1 | 2 | 3; kind?:'bed'|'shelf' } | { type: 'update'; id: string; patch: Partial<Bed> } | { type: 'remove'; id: string } | { type: 'select'; id: string | null } | { type: 'join'; id: string; targetId: string; side?:JoinSide } | { type: 'snap'; id: string };
+export type Layout = { beds: Bed[]; selected: string | null; tent?: Tent };
+export function dropPreview(beds:Bed[],id:string,tent: Tent = DEFAULT_TENT){if(!beds.some(b=>b.id===id))return null;const candidate=snapBed(beds,id,undefined,undefined,tent);const partners=beds.filter(b=>connected(candidate,b));if(!partners.length)return null;const projected=beds.map(b=>b.id===id?candidate:b),issues=collisions(projected,tent);if(issues[id].length||partners.some(b=>issues[b.id].length))return null;return {candidate,ids:[id,...partners.map(b=>b.id)],issues};}
+export function joinStatus(beds:Bed[],id:string,targetId:string,side:JoinSide,tent: Tent = DEFAULT_TENT){const candidate=snapBed(beds,id,targetId,side,tent);const errors=collisions(beds.map(b=>b.id===id?candidate:b),tent)[id];return {candidate,errors,valid:errors.length===0};}
+export type Action = {type:'update-tent';patch:Partial<Tent>} | {type:'reset'} | {type:'load';layout:Layout} | {type:'bed-level';id:string;delta:1|-1} | {type:'clear'} | {type:'restore';layout:Layout} | {type:'shelf-level';id:string;delta:1|-1} | { type: 'add'; levels: 1 | 2 | 3; kind?:'bed'|'shelf' } | { type: 'update'; id: string; patch: Partial<Bed> } | { type: 'remove'; id: string } | { type: 'select'; id: string | null } | { type: 'join'; id: string; targetId: string; side?:JoinSide } | { type: 'snap'; id: string };
 export function nextLayout(state: Layout, action: Action): Layout {
-  if(action.type==='load'){if(!Array.isArray(action.layout?.beds))throw Error('Niepoprawny projekt.');action.layout.beds.forEach(validate);return {beds:action.layout.beds,selected:action.layout.selected};}
+  const tent = state.tent ?? DEFAULT_TENT;
+  if (action.type === 'update-tent') {
+    if (Object.keys(action.patch).some(key => !['width','length','wallHeight','ridgeHeight'].includes(key))) throw Error('Nieznany parametr namiotu.');
+    return { ...state, tent: validateTent({ ...tent, ...action.patch }) };
+  }
+  if (action.type === 'reset') return { beds: [], selected: null, tent: { ...DEFAULT_TENT } };
+  if(action.type==='load'){if(!Array.isArray(action.layout?.beds))throw Error('Niepoprawny projekt.');action.layout.beds.forEach(validate);return {beds:action.layout.beds,selected:action.layout.selected,tent:validateTent(action.layout.tent ?? DEFAULT_TENT)};}
   if(action.type==='bed-level'){const b=state.beds.find(v=>v.id===action.id);if(!b||b.kind==='shelf')throw Error('Wybierz pryczę.');let changed:Bed;if(action.delta===1){if(b.levels===3)throw Error('Maksymalnie trzy poziomy.');changed=b.levels===1?{...b,levels:2,upper:b.upper>=b.lower+10?b.upper:b.lower+85}:{...b,levels:3,middle:b.upper,upper:b.upper+(b.upper-b.lower)};}else{if(b.levels===1)throw Error('Prycza musi mieć przynajmniej jeden poziom.');changed=b.levels===3?{...b,levels:2,upper:b.middle,middle:undefined} as Bed:{...b,levels:1};}validate(changed);return {...state,beds:state.beds.map(v=>v.id===b.id?changed:v)};}
-  if(action.type==='clear')return {beds:[],selected:null};
-  if(action.type==='restore'){action.layout.beds.forEach(validate);return {beds:[...state.beds,...action.layout.beds.filter(b=>!state.beds.some(v=>v.id===b.id))],selected:action.layout.selected};}
+  if(action.type==='clear')return {...state,beds:[],selected:null};
+  if(action.type==='restore'){action.layout.beds.forEach(validate);return {...state,beds:[...state.beds,...action.layout.beds.filter(b=>!state.beds.some(v=>v.id===b.id))],selected:action.layout.selected};}
   if(action.type==='shelf-level'){const b=state.beds.find(b=>b.id===action.id);if(!b||b.kind!=='shelf')throw Error('Wybierz regał.');const changed=validate({...b,shelfCount:(b.shelfCount||3)+action.delta,middle:(b.lower+b.upper)/2});return {...state,beds:state.beds.map(v=>v.id===b.id?changed:v)};}
   if (action.type === 'select') { if (action.id && !state.beds.some(b => b.id === action.id)) throw Error('Nie znaleziono pryczy.'); return { ...state, selected: action.id }; }
   if (action.type === 'add') {
     let b: Bed = validate({ id: crypto.randomUUID(), levels: action.levels, kind:action.kind, ...(action.kind==='shelf'?shelfDefaults:defaults) }), found = false;
-    for (let z = -120; z <= 120 && !found; z += 10) for (let x = -120; x <= 120 && !found; x += 10) {
+    for (let z = -tent.length/2 + EDGE_CLEARANCE + (b.length+16)/2; z <= tent.length/2 - (b.length+16)/2 && !found; z += 10) for (let x = -tent.width/2 + EDGE_CLEARANCE + (b.width+16)/2; x <= tent.width/2 - EDGE_CLEARANCE - (b.width+16)/2 && !found; x += 10) {
       const candidate = { ...b, x, z };
-      if (collisions([...state.beds, candidate])[b.id].length === 0) { b = candidate; found = true; }
+      if (collisions([...state.beds, candidate], tent)[b.id].length === 0) { b = candidate; found = true; }
     }
-    return { beds: [...state.beds, b], selected: b.id };
+    return { ...state, beds: [...state.beds, b], selected: b.id };
   }
   if (!state.beds.some(b => b.id === action.id)) throw Error('Nie znaleziono pryczy.');
-  if (action.type === 'remove') return { beds: state.beds.filter(b => b.id !== action.id), selected: state.selected === action.id ? null : state.selected };
+  if (action.type === 'remove') return { ...state, beds: state.beds.filter(b => b.id !== action.id), selected: state.selected === action.id ? null : state.selected };
   if (action.type === 'join' || action.type === 'snap') {
     if (action.type === 'join' && (action.targetId === action.id || !state.beds.some(b => b.id === action.targetId))) throw Error('Wybierz inną pryczę.');
-    const snapped = validate(snapBed(state.beds, action.id, action.type === 'join' ? action.targetId : undefined, action.type === 'join' ? action.side : undefined));
+    const snapped = validate(snapBed(state.beds, action.id, action.type === 'join' ? action.targetId : undefined, action.type === 'join' ? action.side : undefined, tent));
     return { ...state, beds: state.beds.map(b => b.id === action.id ? snapped : b) };
   }
   const allowed = ['middle', 'width', 'length', 'lower', 'upper', 'x', 'z', 'rotation'];
