@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {defaults,shelfDefaults,bounds,parts,members,assembly,roofCollision,collisions,nextLayout,validate,connected,materialList,clearance,DEFAULT_TENT,validateTent,tentMasts} from '../app/model.ts';
+import {defaults,shelfDefaults,bounds,parts,members,assembly,roofCollision,collisions,nextLayout,validate,connected,materialList,clearance,DEFAULT_TENT,validateTent,tentMasts,DEFAULT_CONSTRUCTION,validateConstruction} from '../app/model.ts';
 const bed=(patch={})=>({id:'a',levels:2,...defaults,width:80,length:180,lower:50,upper:150,z:-120,...patch});
 const shelf=(patch={})=>({id:'s',kind:'shelf',levels:3,...shelfDefaults,width:80,length:40,lower:30,middle:75,upper:120,z:-120,...patch});
 const approx=(a,b)=>assert.ok(Math.abs(a-b)<1e-6,`${a} != ${b}`);
@@ -29,7 +29,7 @@ import {joinStatus} from '../app/model.ts';
 test('green join choices agree with resulting collision checks',()=>{const beds=[bed({x:-120}),shelf()];const good=joinStatus(beds,'s','a','right'),bad=joinStatus(beds,'s','a','left');assert.equal(good.valid,true);assert.equal(bad.valid,false);assert.ok(bad.errors.some(e=>e.includes('20 cm')));const after=nextLayout({beds,selected:'s'},{type:'join',id:'s',targetId:'a',side:'right'});assert.equal(collisions(after.beds).s.length,0);assert.deepEqual(after.beds[1],good.candidate)});
 
 test('bed levels preserve current surfaces and equal spacing through 1-2-3-2-1',()=>{let s={beds:[bed({levels:1,lower:35,upper:120})],selected:'a'};s=nextLayout(s,{type:'bed-level',id:'a',delta:1});assert.deepEqual([s.beds[0].lower,s.beds[0].upper],[35,120]);s=nextLayout(s,{type:'bed-level',id:'a',delta:1});assert.deepEqual([s.beds[0].lower,s.beds[0].middle,s.beds[0].upper],[35,120,205]);assert.equal(materialList(s.beds).fabrics.length,3);assert.throws(()=>nextLayout(s,{type:'bed-level',id:'a',delta:1}));s=nextLayout(s,{type:'bed-level',id:'a',delta:-1});assert.equal(s.beds[0].upper,120);s=nextLayout(s,{type:'bed-level',id:'a',delta:-1});assert.equal(s.beds[0].lower,35);assert.equal(s.beds[0].levels,1);assert.throws(()=>nextLayout(s,{type:'bed-level',id:'a',delta:-1}))});
-test('loading validates before replacing layout',()=>{const original={beds:[bed()],selected:'a'};assert.throws(()=>nextLayout(original,{type:'load',layout:{beds:[bed({width:0})],selected:'a'}}));assert.equal(original.beds.length,1);assert.deepEqual(nextLayout({beds:[],selected:null},{type:'load',layout:original}),{...original,tent:{...DEFAULT_TENT}})});
+test('loading validates before replacing layout',()=>{const original={beds:[bed()],selected:'a'};assert.throws(()=>nextLayout(original,{type:'load',layout:{beds:[bed({width:0})],selected:'a'}}));assert.equal(original.beds.length,1);assert.deepEqual(nextLayout({beds:[],selected:null},{type:'load',layout:original}),{...original,tent:{...DEFAULT_TENT},construction:{...DEFAULT_CONSTRUCTION}})});
 
 import {dropPreview,mastCollisions} from '../app/model.ts';
 test('three mast positions reject beds and shelves even with roof hidden',()=>{for(const z of [-250,0,250]){assert.equal(mastCollisions(bed({z})).length,1);assert.equal(mastCollisions(shelf({z})).length,1);assert.ok(collisions([bed({z})]).a.some(e=>e.includes('masztem')))}});
@@ -73,7 +73,7 @@ test('tent editing rejects invalid values without mutating beds or dimensions',(
  assert.throws(()=>validateTent({...DEFAULT_TENT,ridgeHeight:'250'}));
 });
 test('custom tent dimensions survive save/load and old projects restore default tent',()=>{
- const custom={beds:[bed()],selected:'a',tent:{width:600,length:700,wallHeight:200,ridgeHeight:300}};
+ const custom={beds:[bed()],selected:'a',tent:{width:600,length:700,wallHeight:200,ridgeHeight:300},construction:{...DEFAULT_CONSTRUCTION}};
  assert.deepEqual(nextLayout({beds:[],selected:null},{type:'load',layout:JSON.parse(JSON.stringify(custom))}),custom);
  const legacy={beds:[bed()],selected:'a'};
  assert.deepEqual(nextLayout(custom,{type:'load',layout:legacy}).tent,DEFAULT_TENT);
@@ -84,7 +84,7 @@ test('clear and remove retain tent while new project resets it',()=>{
  const original={beds:[bed()],selected:'a',tent:{...DEFAULT_TENT,width:600}};
  assert.equal(nextLayout(original,{type:'clear'}).tent.width,600);
  assert.equal(nextLayout(original,{type:'remove',id:'a'}).tent.width,600);
- assert.deepEqual(nextLayout(original,{type:'reset'}),{beds:[],selected:null,tent:{...DEFAULT_TENT}});
+ assert.deepEqual(nextLayout(original,{type:'reset'}),{beds:[],selected:null,tent:{...DEFAULT_TENT},construction:{...DEFAULT_CONSTRUCTION}});
 });
 test('new beds find available positions across an edited tent',()=>{
  const tent={...DEFAULT_TENT,width:600,length:700,wallHeight:200,ridgeHeight:300};
@@ -100,4 +100,70 @@ test('join and blue snap preview evaluate the edited tent instead of defaults',(
  const preview=dropPreview(beds,'b',tent);assert.ok(preview);
  const joined=nextLayout({beds,selected:'b',tent},{type:'snap',id:'b'});
  assert.deepEqual(joined.beds[1],preview.candidate);assert.deepEqual(collisions(joined.beds,tent).b,[]);
+});
+
+import {splitMember} from '../app/model.ts';
+test('default 6 cm ends yield 87 and 197 cm beams for a 75 by 185 bed',()=>{
+ const b={id:'a',levels:2,...defaults};
+ assert.deepEqual(materialList([b]).rows.filter(r=>r.kind==='rail').map(r=>[r.length,r.diameter,r.count]),[[87,8,4],[197,8,4]]);
+ const longer={...DEFAULT_CONSTRUCTION,notchLength:8};
+ assert.deepEqual(materialList([b],longer).rows.filter(r=>r.kind==='rail').map(r=>r.length),[91,201]);
+ approx(materialList([b],longer).meters-materialList([b]).meters,.32);
+});
+test('global diameter and end length independently control thickness, beam length and physical bounds',()=>{
+ const b=bed({z:0}),construction={poleDiameter:12,notchLength:9};
+ assert.ok(members(b,construction).every(p=>p.radius===6));
+ assert.deepEqual(materialList([b],construction).rows.filter(r=>r.kind==='rail').map(r=>r.length),[98,198]);
+ assert.deepEqual(bounds(b,construction),{minX:-52,maxX:52,minZ:-102,maxZ:102});
+ assert.deepEqual(bounds({...b,rotation:90},construction),{minX:-102,maxX:102,minZ:-52,maxZ:52});
+ assert.deepEqual(bounds(b,{...construction,notchLength:18}),{minX:-58,maxX:58,minZ:-108,maxZ:108});
+ assert.equal(roofCollision(bed({x:132,upper:175}),DEFAULT_TENT,construction),true);
+ assert.ok(collisions([bed({x:132})],DEFAULT_TENT,construction).a.some(e=>e.includes('20 cm')));
+ assert.equal(mastCollisions(bed({x:55,z:0}),DEFAULT_TENT,construction).length,1);
+ const post=members(b,construction).find(p=>p.kind==='post');
+ assert.deepEqual(splitMember(post).filter(p=>p.radius===4.5).map(p=>[p.a[1],p.b[1]]),[[38,50],[138,150]]);
+});
+test('joining under global diameter keeps end overlaps separate and merges only shared members',()=>{
+ const construction={poleDiameter:12,notchLength:9};
+ for(const rotation of [0,90]){
+  const a=bed({rotation}),b=bed({id:'b',rotation});
+  const joined=nextLayout({beds:[a,b],selected:'b',construction},{type:'join',id:'b',targetId:'a',side:'right'});
+  assert.equal(connected(...joined.beds,construction),true);
+  assert.equal(materialList(joined.beds,construction).saved,4);
+  assert.equal(materialList(joined.beds,construction).poles,20);
+ }
+});
+test('global changes update every bed and shelf, including models added later',()=>{
+ const original={beds:[bed(),shelf()],selected:'a'};
+ const changed=nextLayout(original,{type:'update-construction',patch:{poleDiameter:10,notchLength:7}});
+ assert.equal(changed.beds,original.beds);
+ assert.ok(assembly(changed.beds,changed.construction).every(p=>p.radius===5));
+ assert.deepEqual(materialList([changed.beds[0]],changed.construction).rows.filter(r=>r.kind==='rail').map(r=>r.length),[94,194]);
+ assert.deepEqual(materialList([changed.beds[1]],changed.construction).rows.filter(r=>r.kind==='rail').map(r=>r.length),[54,94]);
+ const added=nextLayout(changed,{type:'add',levels:1});
+ const b=added.beds.at(-1);
+ assert.equal(b.poleDiameter,undefined);assert.equal(b.notchLength,undefined);
+ assert.ok(members(b,added.construction).every(p=>p.radius===5));
+ assert.deepEqual(materialList([b],added.construction).rows.filter(r=>r.kind==='rail').map(r=>r.length),[89,199]);
+ assert.throws(()=>nextLayout(original,{type:'update',id:'a',patch:{poleDiameter:10}}));
+});
+test('global parameters survive save/load and legacy projects restore defaults',()=>{
+ const original={beds:[bed()],selected:'a'};
+ const changed=nextLayout(original,{type:'update-construction',patch:{poleDiameter:10,notchLength:7}});
+ const loaded=nextLayout(original,{type:'load',layout:JSON.parse(JSON.stringify(changed))});
+ assert.deepEqual(loaded.construction,{poleDiameter:10,notchLength:7});
+ assert.deepEqual(nextLayout(changed,{type:'load',layout:original}).construction,DEFAULT_CONSTRUCTION);
+ assert.equal(original.construction,undefined);
+ for(const patch of [{poleDiameter:NaN},{poleDiameter:null},{poleDiameter:0},{poleDiameter:31},{notchLength:Infinity},{notchLength:'6'},{notchLength:0},{notchLength:31},{unexpected:8}]){
+  assert.throws(()=>nextLayout(original,{type:'update-construction',patch}));
+ }
+ assert.throws(()=>nextLayout(changed,{type:'load',layout:{...changed,construction:{poleDiameter:NaN,notchLength:6}}}));
+ assert.throws(()=>validateConstruction({poleDiameter:8}));
+ assert.throws(()=>nextLayout({beds:[bed({levels:1,lower:12})],selected:'a'},{type:'update-construction',patch:{poleDiameter:20}}));
+});
+test('clear retains global settings and a new project resets them',()=>{
+ const original={beds:[bed()],selected:'a',construction:{poleDiameter:10,notchLength:7}};
+ assert.equal(nextLayout(original,{type:'clear'}).construction,original.construction);
+ assert.equal(nextLayout(original,{type:'remove',id:'a'}).construction,original.construction);
+ assert.deepEqual(nextLayout(original,{type:'reset'}).construction,DEFAULT_CONSTRUCTION);
 });

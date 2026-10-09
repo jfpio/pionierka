@@ -7,6 +7,7 @@ Interaktywny projektant prycz i regałów do namiotu harcerskiego z edytowalnymi
 ## Możliwości
 
 - Dodawanie prycz i regałów, zmiana wymiarów i liczby poziomów, przesuwanie oraz obracanie konstrukcji.
+- Globalna edycja średnicy żerdzi i długości zaciosa dla całego projektu; domyślnie 8 i 6 cm. Długość belki to wymiar użytkowy plus dwa zaciosy (np. 75 + 2 × 6 = 87 cm).
 - Edycja szerokości, długości oraz wysokości ścian i kalenicy namiotu; parametry są zapisywane razem z projektem.
 - Widok 3D oraz widoki z góry, od wejścia i z boku; możliwość ukrycia dachu.
 - Łączenie konstrukcji ze wspólnymi żerdziami i podgląd dopasowania przed połączeniem.
@@ -76,6 +77,8 @@ GitHub Pages korzysta z tego samego komponentu projektanta i zapisu w przegląda
 ## Założenia wersji demo
 
 Domyślny namiot ma 400 × 500 cm, 160 cm wysokości przy ścianie i 250 cm w kalenicy. Te wymiary można zmienić w panelu parametrów namiotu; widok 3D, sprawdzanie dopasowania i wydruk korzystają z aktualnych wartości. Model przyjmuje trzy maszty o średnicy 8 cm. Od boków i tyłu wymagany jest odstęp co najmniej 20 cm; przy wejściu nie jest wymagany odstęp.
+
+Średnica żerdzi i długość zaciosa są niezależnymi ustawieniami całego projektu, wspólnymi dla wszystkich prycz i regałów. Domyślne 6 cm zaciosa to rekomendacja autora aplikacji (3/4 domyślnej średnicy 8 cm), nie wymiar narzucony przez skrypt Orła. Starsze zapisy bez tych parametrów korzystają z wartości 8 i 6 cm. Maszty namiotu zachowują średnicę 8 cm.
 
 Projektant sprawdza geometrię konstrukcji. Nie ocenia ich wytrzymałości ani przestrzeni potrzebnej śpiącej osobie. Porady kursowe są materiałem pomocniczym; nie wszystkie ich zalecenia są automatycznymi regułami projektanta.
 
